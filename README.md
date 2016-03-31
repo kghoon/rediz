@@ -1,0 +1,2 @@
+# rediz
+Simple redigo wrapper

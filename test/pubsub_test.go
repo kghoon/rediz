@@ -1,63 +1,37 @@
 package test
 
 import (
-	"testing"
-	"rediz"
+	"fmt"
 	"log"
+	"rediz"
+	"testing"
 	"time"
-	"github.com/garyburd/redigo/redis"
 )
 
+const ChannelName = "test_channel"
+
 func TestPubSubHandlers(t *testing.T) {
-	c, err := rediz.NewConn(RedisAddress)
-	if err != nil {
-		t.Fatal(err)
-	}
+	psAgent := rediz.RedisPubSubAgent{}
+	psAgent.Activate(RedisAddress)
 
-	waiting := make(chan bool)
-
-	c.SyncDo("FLUSHDB")
-
-	psc := c.PubSubConn()
-	if psc != c.PubSubConn() {
-		t.Fail()
-	}
-
-	psc.OnMessage("test-channel", func(channel string, data []byte) {
-		if message := string(data); message != "Hello, World!?" {
-			t.Fail()
-		}
-		waiting<-true
+	err := psAgent.Subscribe(ChannelName, func(msg string) {
+		log.Printf("handle msg [%s]\n", msg)
 	})
 
-	psc.Subscribe("test-channel")
-
-	pub, err := rediz.NewConn(RedisAddress)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	times := 100
-
-	go func() {
-		for i := 0; i < times; i++ {
-			_, err := redis.Int64(pub.Do("PUBLISH", "test-channel", "Hello, World!?"))
-			if err != nil {
-				t.Fatal(err)
-			}
+	for i := 0; i < 5; i++ {
+		msg := fmt.Sprintf("testMsg-%d", i)
+		_, err := psAgent.Publish(ChannelName, msg)
+		if err != nil {
+			t.Fatal(err)
 		}
-	}()
-
-	go func() {
-		time.Sleep(10 * time.Second)
-		waiting<-false
-	}()
-
-	for i := 0; i < times; i++ {
-		if ok := <-waiting; !ok {
-			t.Fail()
-		}
+		log.Printf("publish : %s", msg)
+		time.Sleep(1 * time.Second)
 	}
+	psAgent.Deactivate(true)
 
 	log.Println("Done")
 }

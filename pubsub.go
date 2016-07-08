@@ -78,12 +78,9 @@ func receiveWorker(psa *RedisPubSubAgent) {
 
 			switch v := psa.subConn.Receive().(type) {
 			case redis.Message:
-				//log.Println("receive msg " + string(v.Data))
 				if h, exist := psa.messageHandlers[v.Channel]; exist {
 					h(string(v.Data))
 				}
-				//case redis.Subscription:
-				//	log.Println("subscription " + string(v.Count))
 			}
 		}
 	}

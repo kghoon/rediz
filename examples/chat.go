@@ -1,50 +1,47 @@
 package main
 
 import (
-	"rediz"
-	"regexp"
+	"bufio"
 	"fmt"
 	"log"
-	"github.com/garyburd/redigo/redis"
-	"bufio"
 	"os"
-	"strconv"
+	"path"
+	"rediz"
+	"regexp"
 	"strings"
 )
 
 const (
-	RedisAddress = "192.168.99.100:6379"
+	RedisAddress   = "local-redis:6379"
 	KeyChatChannel = "test-chat"
-	KeyUserId = "user-id"
-	FmtMessage = "msg,%s:%s"
+	FmtMessage     = "msg,%s:%s" //fromUserName:message
 )
 
-var reMessage = regexp.MustCompile(fmt.Sprintf(FmtMessage, "([\\d]+)", "(.+)"))
+var reMessage = regexp.MustCompile(fmt.Sprintf(FmtMessage, "(.+)", "(.+)"))
 
 func main() {
-	pub, sub := NewConnPair()
-	defer pub.Close()
-	defer sub.Close()
+	if len(os.Args) != 2 {
+		log.Printf("usage: %s [USERNAME]", path.Base(os.Args[0]))
+		return
+	}
+	chatName := os.Args[1]
+	log.Printf("Welcome '%s'! Let's start chatting\n", chatName)
 
-	userId := GetUserId(pub)
+	psAgent := rediz.RedisPubSubAgent{}
+	psAgent.Activate(RedisAddress)
 
-	psc := sub.PubSubConn()
-
-	psc.OnMessage(KeyChatChannel, func(channel string, data []byte) {
-		if tokens := reMessage.FindStringSubmatch(string(data)); len(tokens) > 0 {
-			if id, err := strconv.ParseInt(tokens[1], 10, 64); err != nil {
-				log.Println("Error:", err)
-			} else if id == userId {
-				tokens[1] = "ME"
+	psAgent.Subscribe(KeyChatChannel, func(msg string) {
+		if tokens := reMessage.FindStringSubmatch(msg); len(tokens) > 0 {
+			var userName string
+			if tokens[1] == chatName {
+				userName = "ME"
+			} else {
+				userName = tokens[1]
 			}
-			log.Printf("[%s]: %s\n", tokens[1], tokens[2])
+			log.Printf("[%s]: %s\n", userName, tokens[2])
 		}
 	})
 
-	psc.Subscribe(KeyChatChannel)
-	defer psc.Unsubscribe(KeyChatChannel)
-
-	log.Printf("Welcome! Your ID is %d \n", userId)
 	reader := bufio.NewReader(os.Stdin)
 
 	for {
@@ -54,29 +51,9 @@ func main() {
 			break
 		}
 
-		message := fmt.Sprintf(FmtMessage, strconv.FormatInt(userId, 10), text)
-		pub.SyncDo("PUBLISH", KeyChatChannel, message)
-	}
-}
-
-func NewConnPair() (*rediz.ResourceConn, *rediz.ResourceConn) {
-	pub, err := rediz.NewConn(RedisAddress)
-	if err != nil {
-		panic(err)
+		message := fmt.Sprintf(FmtMessage, chatName, text)
+		psAgent.Publish(KeyChatChannel, message)
 	}
 
-	sub, err := rediz.NewConn(RedisAddress)
-	if err != nil {
-		panic(err)
-	}
-
-	return &pub, &sub
-}
-
-func GetUserId(c *rediz.ResourceConn) int64 {
-	id, err := redis.Int64(c.SyncDo("INCR", KeyUserId))
-	if err != nil {
-		panic(err)
-	}
-	return id
+	psAgent.Deactivate(true)
 }

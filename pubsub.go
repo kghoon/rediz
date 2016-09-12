@@ -17,15 +17,9 @@ type RedisPubSubAgent struct {
 	messageHandlers map[string]MessageHandler
 }
 
-func (psa *RedisPubSubAgent) Activate(redisAddress string) {
-	subConn, err := NewConn(redisAddress)
-	if err != nil {
-		panic(err)
-	}
-	pubConn, err := NewConn(redisAddress)
-	if err != nil {
-		panic(err)
-	}
+func (psa *RedisPubSubAgent) Activate(redisAddress string, passwd string) {
+	subConn := NewConn(redisAddress, passwd)
+	pubConn := NewConn(redisAddress, passwd)
 
 	psa.wg = sync.WaitGroup{}
 	psa.subConn = &subConn

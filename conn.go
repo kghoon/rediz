@@ -29,11 +29,23 @@ func (r *ResourceConn) SyncDo(commandName string, args ...interface{}) (reply in
 }
 
 // NewConn will return a connection with server
-func NewConn(address string) (ResourceConn, error) {
+func NewConn(address string, passwd string) ResourceConn {
 	c, err := redis.Dial("tcp", address)
+
+	if err != nil {
+		panic(err)
+	}
+
+	if passwd != "" {
+		_, err := c.Do("AUTH", passwd)
+
+		if err != nil {
+			panic(err)
+		}
+	}
 
 	return ResourceConn{
 		PubSubConn: &redis.PubSubConn{c},
 		mutex:      new(sync.Mutex),
-	}, err
+	}
 }
